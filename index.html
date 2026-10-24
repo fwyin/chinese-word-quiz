@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>國語期中考複習 生字大挑戰</title>
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --success: #16A34A;
+      --danger: #DC2626;
+      --bg: #F8FAFC;
+    }
+    * { box-sizing: border-box; touch-action: none; font-family: -apple-system, "Microsoft JhengHei", sans-serif; }
+    body {
+      margin: 0; padding: 16px; background-color: var(--bg);
+      display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+    }
+    .card {
+      background: #ffffff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      padding: 24px; width: 100%; max-width: 440px; text-align: center;
+    }
+    .hidden { display: none !important; }
+    
+    /* 標題與按鈕 */
+    h1 { color: #1E293B; font-size: 24px; }
+    button {
+      width: 100%; padding: 14px; font-size: 18px; font-weight: bold; border: none;
+      border-radius: 10px; cursor: pointer; margin-top: 12px; transition: 0.2s;
+    }
+    .btn-practice { background: #38BDF8; color: white; }
+    .btn-challenge { background: #F59E0B; color: white; }
+    .btn-submit { background: var(--primary); color: white; }
+    .btn-clear { background: #E2E8F0; color: #475569; }
+    input[type="text"] {
+      width: 100%; padding: 12px; font-size: 18px; border: 2px solid #CBD5E1; 
+      border-radius: 8px; text-align: center; margin-bottom: 16px;
+    }
+
+    /* 測驗區 */
+    .progress { font-size: 14px; color: #64748B; display: flex; justify-content: space-between; }
+    .question-box { font-size: 32px; font-weight: bold; color: #1E293B; margin: 16px 0; }
+    .zhuyin-tag { background: #EEF2FF; color: var(--primary); padding: 4px 12px; border-radius: 8px; border: 1px dashed var(--primary); font-size: 26px; margin: 0 4px; }
+    
+    /* 畫布 */
+    .canvas-wrapper {
+      position: relative; margin: 16px auto; width: 260px; height: 260px;
+      border: 2px solid #CBD5E1; border-radius: 12px; background-color: #FAFAFA;
+      background-image: linear-gradient(to right, #E2E8F0 1px, transparent 1px), linear-gradient(to bottom, #E2E8F0 1px, transparent 1px);
+      background-size: 130px 130px; background-position: center;
+    }
+    canvas { width: 100%; height: 100%; border-radius: 10px; cursor: crosshair; }
+    .btn-group { display: flex; gap: 12px; margin-top: 16px; }
+    .btn-group button { margin-top: 0; }
+    .feedback { margin-top: 16px; font-size: 18px; font-weight: bold; min-height: 27px; }
+    .feedback.correct { color: var(--success); }
+    .feedback.wrong { color: var(--danger); }
+
+    /* 排行榜 */
+    .leaderboard { text-align: left; margin-top: 20px; background: #F1F5F9; padding: 16px; border-radius: 10px; }
+    .leaderboard p { margin: 8px 0; font-size: 18px; font-weight: bold; border-bottom: 1px solid #CBD5E1; padding-bottom: 4px; }
+  </style>
+</head>
+<body>
+
+<!-- 主選單 -->
+<div id="homeScreen" class="card">
+  <h1>期中考生字複習</h1>
+  <button class="btn-practice" onclick="setMode('practice')">練習模式 (不計分)</button>
+  <button class="btn-challenge" onclick="showNameInput()">挑戰模式 (計分排行榜)</button>
+</div>
+
+<!-- 輸入姓名 (僅挑戰模式) -->
+<div id="nameScreen" class="card hidden">
+  <h1>準備挑戰</h1>
+  <input type="text" id="playerName" placeholder="請輸入你的姓名" />
+  <button class="btn-challenge" onclick="setMode('challenge')">開始測驗</button>
+  <button class="btn-clear" onclick="goHome()">返回</button>
+</div>
+
+<!-- 測驗畫面 -->
+<div id="quizScreen" class="card hidden">
+  <div class="progress">
+    <span id="progressText">第 1 / 10 題</span>
+    <span id="scoreDisplay" class="hidden">得分：0</span>
+  </div>
+  
+  <div class="question-box">
+    <span id="qPrefix"></span><span class="zhuyin-tag" id="qZhuyin"></span><span id="qSuffix"></span>
+  </div>
+
+  <div class="canvas-wrapper">
+    <canvas id="paintCanvas" width="260" height="260"></canvas>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn-clear" id="clearBtn">重寫</button>
+    <button class="btn-submit" id="submitBtn">送出</button>
+  </div>
+  <div class="feedback" id="feedback"></div>
+</div>
+
+<!-- 結果與排行榜 -->
+<div id="resultScreen" class="card hidden">
+  <h1 id="resultTitle">測驗完成！</h1>
+  <h2 id="finalScore" style="color: var(--primary); font-size: 36px; margin: 10px 0;"></h2>
+  
+  <div id="leaderboardArea" class="leaderboard hidden">
+    <h3>🏆 高手排行榜 (Top 5)</h3>
+    <div id="leaderboardList"></div>
+  </div>
+
+  <button class="btn-submit" onclick="goHome()">回主選單</button>
+</div>
+
+<script>
+  // 40題題庫
+  const allQuestions = [
+    { p: "窗", z: "ㄏㄨˋ", s: "", a: "戶" },
+    { p: "一", z: "ㄘㄨˋ", s: "鮮花", a: "簇" },
+    { p: "浪", z: "ㄇㄢˋ", s: "", a: "漫" },
+    { p: "收", z: "ㄏㄨㄛˋ", s: "", a: "獲" },
+    { p: "姿", z: "ㄊㄞˋ", s: "", a: "態" },
+    { p: "歡", z: "ㄧㄥˊ", s: "", a: "迎" },
+    { p: "人", z: "ㄇㄧㄣˊ", s: "", a: "民" },
+    { p: "鮮", z: "ㄋㄣˋ", s: "", a: "嫩" },
+    { p: "滾", z: "ㄊㄤˋ", s: "", a: "燙" },
+    { p: "牙", z: "ㄔˇ", s: "", a: "齒" },
+    { p: "午", z: "ㄘㄢ", s: "", a: "餐" },
+    { p: "肚子", z: "ㄜˋ", s: "", a: "餓" },
+    { p: "更", z: "ㄏㄨㄢˋ", s: "", a: "換" },
+    { p: "", z: "ㄕˋ", s: "兵", a: "士" },
+    { p: "心", z: "ㄙㄨㄢ", s: "", a: "酸" },
+    { p: "", z: "ㄌㄚˋ", s: "味", a: "辣" },
+    { p: "", z: "ㄏㄨㄛˋ", s: "得", a: "獲" },
+    { p: "", z: "ㄔㄞ", s: "除", a: "拆" },
+    { p: "", z: "ㄕㄢ", s: "風", a: "搧" },
+    { p: "", z: "ㄌㄧㄥˊ", s: "聽", a: "聆" },
+    { p: "演", z: "ㄗㄡˋ", s: "", a: "奏" },
+    { p: "", z: "ㄑㄧㄢˇ", s: "藍色", a: "淺" },
+    { p: "日", z: "ㄕˋ", s: "建築", a: "式" },
+    { p: "", z: "ㄨㄢˊ", s: "皮", a: "頑" },
+    { p: "", z: "ㄐㄩˇ", s: "手", a: "舉" },
+    { p: "筋疲力", z: "ㄐㄧㄝˊ", s: "", a: "竭" },
+    { p: "", z: "ㄑㄧˋ", s: "權", a: "棄" },
+    { p: "挑", z: "ㄓㄢˋ", s: "", a: "戰" },
+    { p: "", z: "ㄐㄧㄠ", s: "傲", a: "驕" },
+    { p: "地", z: "ㄓㄣˋ", s: "", a: "震" },
+    { p: "", z: "ㄆㄟˋ", s: "服", a: "佩" },
+    { p: "", z: "ㄐㄩㄢ", s: "助", a: "捐" },
+    { p: "亞", z: "ㄓㄡ", s: "", a: "洲" },
+    { p: "", z: "ㄍㄤ", s: "鐵", a: "鋼" },
+    { p: "保", z: "ㄏㄨˋ", s: "", a: "護" },
+    { p: "樓", z: "ㄘㄥˊ", s: "", a: "層" },
+    { p: "", z: "ㄖㄨㄥˊ", s: "化", a: "融" },
+    { p: "", z: "ㄈㄨˇ", s: "視", a: "俯" },
+    { p: "", z: "ㄧㄢ", s: "火", a: "煙" },
+    { p: "", z: "ㄌㄧㄥˇ", s: "取", a: "領" }
+  ];
+
+  let testQuestions = [];
+  let currentIdx = 0;
+  let score = 0;
+  let isChallenge = false;
+  let playerName = "";
+  
+  const screens = ['homeScreen', 'nameScreen', 'quizScreen', 'resultScreen'];
+  function switchScreen(id) {
+    screens.forEach(s => document.getElementById(s).classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  function goHome() {
+    switchScreen('homeScreen');
+    document.getElementById('playerName').value = "";
+  }
+
+  function showNameInput() {
+    switchScreen('nameScreen');
+  }
+
+  function setMode(mode) {
+    if (mode === 'challenge') {
+      playerName = document.getElementById('playerName').value.trim();
+      if (!playerName) return alert("請輸入姓名喔！");
+      isChallenge = true;
+      document.getElementById('scoreDisplay').classList.remove('hidden');
+    } else {
+      isChallenge = false;
+      document.getElementById('scoreDisplay').classList.add('hidden');
+    }
+
+    // 隨機抽 10 題
+    testQuestions = [...allQuestions].sort(() => 0.5 - Math.random()).slice(0, 10);
+    currentIdx = 0;
+    score = 0;
+    updateScoreDisplay();
+    switchScreen('quizScreen');
+    renderQuestion();
+  }
+
+  // --- 手寫板邏輯 ---
+  const canvas = document.getElementById('paintCanvas');
+  const ctx = canvas.getContext('2d');
+  const feedback = document.getElementById('feedback');
+  let isDrawing = false;
+  let strokes = []; 
+  let currentStroke = [[], [], []];
+
+  ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1E293B';
+
+  canvas.addEventListener('pointerdown', (e) => {
+    isDrawing = true;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.round(e.clientX - rect.left);
+    const y = Math.round(e.clientY - rect.top);
+    ctx.beginPath(); ctx.moveTo(x, y);
+    currentStroke = [[x], [y], [Date.now()]];
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!isDrawing) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.round(e.clientX - rect.left);
+    const y = Math.round(e.clientY - rect.top);
+    ctx.lineTo(x, y); ctx.stroke();
+    currentStroke[0].push(x); currentStroke[1].push(y); currentStroke[2].push(Date.now());
+  });
+
+  const stopDrawing = () => {
+    if (isDrawing && currentStroke[0].length > 0) strokes.push(currentStroke);
+    isDrawing = false;
+  };
+  canvas.addEventListener('pointerup', stopDrawing);
+  canvas.addEventListener('pointercancel', stopDrawing);
+
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokes = [];
+    feedback.textContent = ""; feedback.className = "feedback";
+  }
+  document.getElementById('clearBtn').addEventListener('click', clearCanvas);
+
+  async function recognizeHandwriting(inkData) {
+    const url = "https://inputtools.google.com/request?ime=handwriting&app=mobilesearch&cs=1&oe=UTF-8";
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        app_version: 0.4, api_level: "537.36", device: "5.0", input_type: "0", options: "enable_pre_space",
+        requests: [{ writing_guide: { writing_area_width: 260, writing_area_height: 260 }, language: "zh-TW", ink: inkData }]
+      })
+    });
+    const data = await res.json();
+    return data[0] === "SUCCESS" ? data[1][0][1] : [];
+  }
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+    if (strokes.length === 0) return (feedback.textContent = "請寫字！", feedback.className = "feedback wrong");
+    feedback.textContent = "辨識中..."; feedback.className = "feedback";
+    document.getElementById('submitBtn').disabled = true;
+
+    try {
+      const candidates = await recognizeHandwriting(strokes);
+      const target = testQuestions[currentIdx].a;
+      
+      // 【修改區塊開始】
+      // 1. 嚴格模式：只看 AI 辨識最有把握的「第一個字」
+      let isCorrect = (candidates[0] === target);
+
+      // 2. 形近字黑名單防呆（如果 AI 第一個字辨識出這些錯字，直接判錯）
+      const wrongTraps = ["折", "戈", "戎", "祈", "族", "剛", "熊"]; 
+      if (wrongTraps.includes(candidates[0])) {
+         isCorrect = false;
+      }
+      // 【修改區塊結束】
+
+      if (isCorrect) {
+        if (isChallenge) { score += 10; updateScoreDisplay(); }
+        feedback.textContent = `答對了！「${target}」`;
+        feedback.className = "feedback correct";
+        setTimeout(nextQuestion, 1500);
+      } else {
+        if (isChallenge) {
+          // 針對抓到的錯字，給予更明確的提示
+          const guessed = candidates[0] ? `(你寫的比較像「${candidates[0]}」)` : "";
+          feedback.textContent = `錯了！正確是「${target}」 ${guessed}`;
+          feedback.className = "feedback wrong";
+          setTimeout(nextQuestion, 2500); // 延長停留時間讓學生看清楚錯在哪
+        } else {
+          feedback.textContent = `筆順或字型不對，請重寫！(辨識為: ${candidates[0] || '無'})`;
+          feedback.className = "feedback wrong";
+          document.getElementById('submitBtn').disabled = false;
+        }
+      }
+    } catch (err) {
+      feedback.textContent = "網路錯誤，請重試。";
+      document.getElementById('submitBtn').disabled = false;
+    }
+  });
+
+  function renderQuestion() {
+    clearCanvas();
+    document.getElementById('submitBtn').disabled = false;
+    const q = testQuestions[currentIdx];
+    document.getElementById('progressText').textContent = `第 ${currentIdx + 1} / 10 題`;
+    document.getElementById('qPrefix').textContent = q.p;
+    document.getElementById('qZhuyin').textContent = q.z;
+    document.getElementById('qSuffix').textContent = q.s;
+  }
+
+  function nextQuestion() {
+    currentIdx++;
+    if (currentIdx < 10) {
+      renderQuestion();
+    } else {
+      finishQuiz();
+    }
+  }
+
+  function updateScoreDisplay() {
+    document.getElementById('scoreDisplay').textContent = `得分：${score}`;
+  }
+
+  function finishQuiz() {
+    switchScreen('resultScreen');
+    if (isChallenge) {
+      document.getElementById('finalScore').textContent = `${score} 分`;
+      saveAndShowLeaderboard();
+    } else {
+      document.getElementById('finalScore').textContent = "練習完成！";
+      document.getElementById('leaderboardArea').classList.add('hidden');
+    }
+  }
+
+// --- 成績上傳並即時讀取全班排行榜 ---
+  function saveAndShowLeaderboard() {
+    document.getElementById('leaderboardArea').classList.add('hidden');
+    document.getElementById('resultTitle').textContent = "上傳成績與結算全班排名中...";
+
+    // ⚠️ 請記得貼上您的 Google Apps Script 網址
+    const scriptURL = "https://script.google.com/macros/s/AKfycbyCeIqLO7w3iCgOJB5QaHw8jGcCuEOtnUUHZpvZ2ExEwvepsa1803dvRHAlxV_BwRVP/exec";
+    
+    // 將姓名與分數打包發送
+    const urlWithData = `${scriptURL}?name=${encodeURIComponent(playerName)}&score=${score}`;
+
+    fetch(urlWithData, { method: 'GET' })
+      .then(response => response.json()) // 告訴網頁接收 Google 回傳的 JSON 資料
+      .then(data => {
+        // 成功取得前五名資料
+        document.getElementById('resultTitle').textContent = "測驗完成！";
+        document.getElementById('leaderboardArea').classList.remove('hidden');
+        
+        // 將 Google 傳回來的陣列，組合排版成 HTML
+        let listHtml = "";
+        data.forEach((record, index) => {
+          let crown = index === 0 ? "👑 " : (index === 1 ? "🥈 " : (index === 2 ? "🥉 " : "✨ "));
+          listHtml += `<p>${crown} 第 ${index + 1} 名： ${record.name} <span>... ${record.score} 分</span></p>`;
+        });
+        
+        document.getElementById('leaderboardList').innerHTML = listHtml;
+      })
+      .catch(error => {
+        document.getElementById('resultTitle').textContent = "上傳失敗，請檢查網路連線。";
+      });
+  }
+</script>
+</body>
+</html>
